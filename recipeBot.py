@@ -2,6 +2,7 @@
 
 from recipeScraper import openSession, formulateJSON
 from youtube_search import YoutubeSearch
+from nltk.metrics.distance import edit_distance
 import spacy
 import sys
 import re
@@ -21,9 +22,14 @@ class RecipeBot:
     nlp = spacy.load("en_core_web_sm")
 
     # Now for some commands and questions we can give the bot:
+    botCommandTypes = {"navTypes": ["forwardNav", "backwardNav", "otherNav", "beginningNav", "endingNav"]}
     botCommands = {"start": ["begin", "walk me through", "start", "want to make", "want to cook", "want to bake"],
-    "nav": ["forward", "next", "back", "previous"],
-    "questions": ["ingredients", "how do", "repeat", "how much"]}
+    "forwardNav": ["forward", "next", "after"],
+    "backwardNav": ["back", "previous", "before"],
+    "beginningNav": ["begin", "first"],
+    "endingNav": ["final", "last"],
+    "otherNav": ["repeat", "th step", "st step", "nd step", "rd step"],
+    "questions": ["How do I"]}
 
     # This set of all possible foods helps with parsing
     allFoods = set(["tofu", "beef", "chicken", "pork", "pepperoni", "sausage", "turkey",
@@ -198,15 +204,55 @@ class RecipeBot:
 
     ############################################################################
     # Name: _processCommand                                                    #
-    # Params: None                                                             #
+    # Params: prompt (what we are asking of the user), validAns                #
+    # (valid answers), buildAns (if true, then we need to build the closest    #
+    # valid answer)                                                            #
     # Returns: userDecision (what the user wants to do next).                  #
     # Notes: Asks and waits until the user gives a valid input.                #
     ############################################################################
-    def _processCommand(self, prompt, validPrompts):
+    def _processCommand(self, prompt, validAns, buildAns = False):
         userDecision = input(prompt)
 
-        while userDecision not in validPrompts:
-            userDecision = int(input("\nI'm sorry, but your command could not be processed. Try again, and if there were numerical prompts, enter just the number: "))
+        if "." in userDecision: # The command may be "Sorry. What's next"
+            userDecision = userDecision.split(".")[-1] # Then we want just the last sentence
+        elif "," in userDecision:
+            userDecision = userDecision.split(",")[-1]
+
+        if buildAns: # Then you need to check for a valid answer against the set of known commands
+            lowestEditDist = float("inf")
+            bestCmd = None
+
+            # Check for navigation commands first
+            for navType in self.botCommandTypes["navTypes"]:
+                for navCmd in self.botCommands[navType]:
+                    if navCmd in userDecision.lower():
+                        return userDecision.lower()
+
+            # Now for the "how to" commands
+            for howToCmd in self.botCommands["questions"]:
+                loweredHowToCmd = howToCmd.lower() # Make comparisons more forgiving for the user
+                if loweredHowToCmd == "how do i do that?":
+                    if edit_distance(userDecision.lower(), "how do i do that?") < 2: # This gets a special case for itself
+                        return "How do I do that?"
+                else: # This may seem a bit odd, but hopefully the comments explain the logic well
+                    splitDecision = userDecision.lower().split(" ") # The issue with general "how do I ...?" is that we don't know what is in the ...
+                    howToCmdSplit = loweredHowToCmd.split(" ") # So we need to compare the edit distance of the first x words of each command
+                    if len(splitDecision) >= len(howToCmdSplit): # Where x is the length of a valid bot command
+                        # So "How do I cook the food?" would match "How do I" since the first 3 words match, but "How does that..." would not match "How do I"
+                        if edit_distance(" ".join(splitDecision[:len(howToCmdSplit)]), loweredHowToCmd) < lowestEditDist and \
+                        edit_distance(" ".join(splitDecision[:len(howToCmdSplit)]), loweredHowToCmd) < 2:
+                            bestCmd = howToCmd + " " + " ".join(splitDecision[len(howToCmdSplit):]) # Construct "best command" with user given context
+                            lowestEditDist = edit_distance(" ".join(splitDecision[:len(howToCmdSplit)]), loweredHowToCmd)
+
+            if not bestCmd is None:
+                return bestCmd # Return the best command found
+            else: # If you got here, then we need to redo the above checks after getting a new command
+                userDecision = self._processCommand("\nI'm sorry, but your command could not be processed. Try again, and if there were numerical prompts, enter just the number: ",
+                None, True)
+
+        else: # It is a straightforward check otherwise
+            while userDecision not in validAns:
+                userDecision = input("\nI'm sorry, but your command could not be processed. Try again, and if there were numerical prompts, enter just the number: ")
 
         return userDecision
 
@@ -222,7 +268,7 @@ class RecipeBot:
             print("- " + self.ingPredicates[ingKeys]["sentence"])
 
         # Now for what's next
-        givenCommand = int(self._processCommand("\nWould you like me to move on to the first step (1) or repeat the list (2)? Enter your choice here: ",
+        givenCommand = int(self._processCommand("\nWould you like me to [1] move on to the first step or [2] repeat the list? Enter your choice here: ",
         ["1", "2"]))
 
         # Go to the right place depending on the request
@@ -237,21 +283,24 @@ class RecipeBot:
     ############################################################################
     # Name: _instructionNavigation                                             #
     # Params: currentStep (the step that the user is currently on,             #
-    # zero-indexed), printInstAgain (tells the script whether to re-print the  #
-    # instruction).                                                            #
+    # zero-indexed), printInst (tells the script whether to print the          #
+    # instruction)                                                             #
     # Returns: None                                                            #
     # Notes: Helps the user navigate through instructions and handles anything #
     # anything that requires an external resource (Google, YouTube, etc.).     #
     ############################################################################
-    def _instructionNavigation(self, currentStep, printInstAgain = True):
-        if len(self.recipeData["instructions"]) == currentStep : # If the current step goes past the last possible instruction number, then we are done
+    def _instructionNavigation(self, currentStep, printInst = True):
+        if len(self.recipeData["instructions"]) <= currentStep : # If the current step goes past the last possible instruction number, then we are done
+            print("\n------------------------------------------------------------------------")
             print("\nLooks like you're all done! Good work and enjoy your food! Thanks for using " + self.name + " and see you next time!")
+            print("\nNOTE: If you jumped too far, we apologize for the inconvenience, but please start again from the top.")
             return
         else:
             for key in self.instPredicates.keys():
                 instOfInterest = self.instPredicates[key]
                 if key == currentStep: # If this is the instruction we are dealing with
-                    if printInstAgain: # Check if we need to print this again (False if this was recursed on by an external resource command)
+                    if printInst: # Check if we need to print the instruction (False if this was recursed on by an external resource command)
+                        print("\n------------------------------------------------------------------------")
                         if currentStep == 0:
                             print("\nThe 1st step is: " + instOfInterest["sentence"])
                         elif currentStep == 1:
@@ -261,30 +310,63 @@ class RecipeBot:
                         else:
                             print("\nThe " + str(key + 1) + "th step is: " + instOfInterest["sentence"])
 
-                    givenCommand = int(self._processCommand("\nWhat would you like to do next? \
-                    [1] Repeat the instruction.\n \
-                    [2] How to do that?\n \
-                    [3] How do I do that thing?\n \
-                    [4] Move on to the next instruction.\n Enter here: ", ["1", "2", "3", "4"])) # That = the primary method used in the instruction
+                    givenCommand = self._processCommand("\nLet me know what you would like to do next: ", None, True) # Valid commands are build in the function
 
-                    if givenCommand == 1:
+                    if "repeat" in givenCommand.lower():
                         self._instructionNavigation(currentStep)
-                    elif givenCommand == 2:
+                    elif "th step" in givenCommand.lower() or \
+                    "st step" in givenCommand.lower() or \
+                    "nd step" in givenCommand.lower() or \
+                    "rd step" in givenCommand.lower(): # It's a "Take me to the nth step" command
+                        splitCmd = givenCommand.split(" ")
+                        for token in splitCmd:
+                            if "th" in token or "st" in token or "nd" in token or "rd" in token:
+                                numberNextTo = None # This is the part of the phrase where the number will be found
+                                if "th" in token:
+                                    numberNextTo = "th"
+                                elif "st" in token:
+                                    numberNextTo = "st"
+                                elif "nd" in token:
+                                    numberNextTo = "nd"
+                                elif "rd" in token:
+                                    numberNextTo = "rd"
+
+                                # Now we jump to the appropriate step (including error checking)
+                                stepNum = token.replace(numberNextTo, "")
+                                if stepNum.isdigit() or stepNum.replace("-", "").isdigit(): # Check for a number and jump there (extra check for negatives)
+                                    if int(stepNum) - 1 <= 0: # Don't look for the 0th step
+                                        print("\nYou would be going to an unreachable step. Please try another command.")
+                                        self._instructionNavigation(currentStep, printInst = False)
+                                    else:
+                                        self._instructionNavigation(int(stepNum) - 1)
+                                elif stepNum == "fir": # "...first step" goes here
+                                    self._instructionNavigation(0)
+                                elif stepNum == "la": # "...last step" goes here
+                                    self._instructionNavigation(len(self.recipeData["instructions"]) - 1)
+                    elif any([navCmd in givenCommand.lower() for navCmd in self.botCommands["beginningNav"]]): # First step command
+                        self._instructionNavigation(0)
+                    elif any([navCmd in givenCommand.lower() for navCmd in self.botCommands["endingNav"]]): # Last step command
+                        self._instructionNavigation(len(self.recipeData["instructions"]) - 1)
+                    elif any([navCmd in givenCommand.lower() for navCmd in self.botCommands["forwardNav"]]):
+                        self._instructionNavigation(currentStep + 1)
+                    elif any([navCmd in givenCommand.lower() for navCmd in self.botCommands["backwardNav"]]):
+                        if currentStep - 1 <= 0: # Don't look for the 0th step
+                            print("\nYou would be going to an unreachable step. Please try another command.")
+                            self._instructionNavigation(currentStep, printInst = False)
+                        else:
+                            self._instructionNavigation(currentStep - 1)
+                    elif givenCommand.lower() == "how do i do that?":
                         searchRes = json.loads(YoutubeSearch(instOfInterest["primaryMethod"], max_results=1).to_json())["videos"][0] # Get the search result
                         print("\nThere's a YouTube video that may be of some help. Check this out: " + \
                         "https://www.youtube.com" + searchRes["url_suffix"])
-                        self._instructionNavigation(currentStep, printInstAgain = False)
-                    elif givenCommand == 3:
-                        action = input("\nWhich thing would you happen to be talking about? Enter here: ")
-                        searchRes = json.loads(YoutubeSearch(action, max_results=1).to_json())["videos"][0] # Get the search result
-                        print("\nThere's a YouTube video that may be of some help. Check this out: " + \
-                        "https://www.youtube.com" + searchRes["url_suffix"])
-                        self._instructionNavigation(currentStep, printInstAgain = False)
-                    elif givenCommand == 4:
-                        self._instructionNavigation(currentStep + 1)
-                    else: # Just a placeholder that will never be reached, hopefully, but just in case...
-                        print("\nI'm sorry, something went really wrong. You should not have reached this branch. The system will exit on its own.")
-                        sys.exit(0)
+                        self._instructionNavigation(currentStep, printInst = False)
+                    else:
+                        if "how do i" in givenCommand.lower():
+                            action = givenCommand.lower()[len("how do i "):] # Search everything after "how do I"
+                            searchRes = json.loads(YoutubeSearch(action, max_results=1).to_json())["videos"][0] # Get the search result
+                            print("\nThere's a YouTube video that may be of some help. Check this out: " + \
+                            "https://www.youtube.com" + searchRes["url_suffix"])
+                            self._instructionNavigation(currentStep, printInst = False)
 
     ############################################################################
     # Name: _allParsing                                                        #
