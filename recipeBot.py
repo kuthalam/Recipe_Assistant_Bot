@@ -247,7 +247,7 @@ class RecipeBot:
             if not bestCmd is None:
                 return bestCmd # Return the best command found
             else: # If you got here, then we need to redo the above checks after getting a new command
-                userDecision = self._processCommand("\nI'm sorry, but your command could not be processed. Try again, and if there were numerical prompts, enter just the number: ",
+                userDecision = self._processCommand("\nI'm afraid that I do not understand that command. Please try again, and if there were numerical prompts, enter just the number: ",
                 None, True)
 
         else: # It is a straightforward check otherwise
