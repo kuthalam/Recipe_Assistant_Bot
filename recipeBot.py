@@ -252,7 +252,7 @@ class RecipeBot:
 
         else: # It is a straightforward check otherwise
             while userDecision not in validAns:
-                userDecision = input("\nI'm sorry, but your command could not be processed. Try again, and if there were numerical prompts, enter just the number: ")
+                userDecision = input("\nI'm afraid that I do not understand that command. Please try again, and if there were numerical prompts, enter just the number: ")
 
         return userDecision
 
@@ -290,10 +290,9 @@ class RecipeBot:
     # anything that requires an external resource (Google, YouTube, etc.).     #
     ############################################################################
     def _instructionNavigation(self, currentStep, printInst = True):
-        if len(self.recipeData["instructions"]) <= currentStep : # If the current step goes past the last possible instruction number, then we are done
+        if len(self.recipeData["instructions"]) == currentStep : # If the current step goes past the last possible instruction number, then we are done
             print("\n------------------------------------------------------------------------")
             print("\nLooks like you're all done! Good work and enjoy your food! Thanks for using " + self.name + " and see you next time!")
-            print("\nNOTE: If you jumped too far, we apologize for the inconvenience, but please start again from the top.")
             return
         else:
             for key in self.instPredicates.keys():
@@ -312,7 +311,7 @@ class RecipeBot:
 
                     givenCommand = self._processCommand("\nLet me know what you would like to do next: ", None, True) # Valid commands are build in the function
 
-                    if "repeat" in givenCommand.lower():
+                    if "repeat" in givenCommand.lower(): # Repeat the instruction
                         self._instructionNavigation(currentStep)
                     elif "th step" in givenCommand.lower() or \
                     "st step" in givenCommand.lower() or \
@@ -337,36 +336,42 @@ class RecipeBot:
                                     if int(stepNum) - 1 <= 0: # Don't look for the 0th step
                                         print("\nYou would be going to an unreachable step. Please try another command.")
                                         self._instructionNavigation(currentStep, printInst = False)
+                                    elif int(stepNum) > len(self.recipeData["instructions"]): # You try to jump too far ahead
+                                        print("""\nThis recipe does not have quite that many steps. If you would like to move to the last possible instruction, try \"Take me to the last step\".
+                                        There are """ + str(len(self.recipeData["instructions"])) + " steps in total.")
+                                        self._instructionNavigation(currentStep, printInst = False)
                                     else:
                                         self._instructionNavigation(int(stepNum) - 1)
-                                elif stepNum == "fir": # "...first step" goes here
+                                elif stepNum == "fir": # "...first step" command that uses the word "first"
                                     self._instructionNavigation(0)
-                                elif stepNum == "la": # "...last step" goes here
+                                elif stepNum == "la": # "...last step" command that uses the word "last"
                                     self._instructionNavigation(len(self.recipeData["instructions"]) - 1)
-                    elif any([navCmd in givenCommand.lower() for navCmd in self.botCommands["beginningNav"]]): # First step command
+                    elif any([navCmd in givenCommand.lower() for navCmd in self.botCommands["beginningNav"]]): # First step command (that does not use the word "first" - see above)
                         self._instructionNavigation(0)
-                    elif any([navCmd in givenCommand.lower() for navCmd in self.botCommands["endingNav"]]): # Last step command
+                    elif any([navCmd in givenCommand.lower() for navCmd in self.botCommands["endingNav"]]): # Last step command (that does not use the word "last" - see above)
                         self._instructionNavigation(len(self.recipeData["instructions"]) - 1)
-                    elif any([navCmd in givenCommand.lower() for navCmd in self.botCommands["forwardNav"]]):
+                    elif any([navCmd in givenCommand.lower() for navCmd in self.botCommands["forwardNav"]]): # Next step command
                         self._instructionNavigation(currentStep + 1)
-                    elif any([navCmd in givenCommand.lower() for navCmd in self.botCommands["backwardNav"]]):
+                    elif any([navCmd in givenCommand.lower() for navCmd in self.botCommands["backwardNav"]]): # Previous step command
                         if currentStep - 1 <= 0: # Don't look for the 0th step
                             print("\nYou would be going to an unreachable step. Please try another command.")
                             self._instructionNavigation(currentStep, printInst = False)
                         else:
                             self._instructionNavigation(currentStep - 1)
-                    elif givenCommand.lower() == "how do i do that?":
+                    elif givenCommand.lower() == "how do i do that?": # Specific to "how do I do that"
                         searchRes = json.loads(YoutubeSearch(instOfInterest["primaryMethod"], max_results=1).to_json())["videos"][0] # Get the search result
                         print("\nThere's a YouTube video that may be of some help. Check this out: " + \
                         "https://www.youtube.com" + searchRes["url_suffix"])
                         self._instructionNavigation(currentStep, printInst = False)
-                    else:
-                        if "how do i" in givenCommand.lower():
-                            action = givenCommand.lower()[len("how do i "):] # Search everything after "how do I"
-                            searchRes = json.loads(YoutubeSearch(action, max_results=1).to_json())["videos"][0] # Get the search result
-                            print("\nThere's a YouTube video that may be of some help. Check this out: " + \
-                            "https://www.youtube.com" + searchRes["url_suffix"])
-                            self._instructionNavigation(currentStep, printInst = False)
+                    elif "how do i" in givenCommand.lower(): # Any vague "how do I" command
+                        action = givenCommand.lower()[len("how do i "):] # Search everything after "how do I"
+                        searchRes = json.loads(YoutubeSearch(action, max_results=1).to_json())["videos"][0] # Get the search result
+                        print("\nThere's a YouTube video that may be of some help. Check this out: " + \
+                        "https://www.youtube.com" + searchRes["url_suffix"])
+                        self._instructionNavigation(currentStep, printInst = False)
+                    else: # If it's not a command that we know how to process
+                        print("\nI'm sorry, something went really wrong. You should not have reached this branch. The system will exit on its own.")
+                        self._instructionNavigation(currentStep, printInst = False)
 
     ############################################################################
     # Name: _allParsing                                                        #
