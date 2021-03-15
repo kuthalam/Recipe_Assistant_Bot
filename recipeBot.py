@@ -2,6 +2,7 @@
 
 from recipeScraper import openSession, formulateJSON
 from youtube_search import YoutubeSearch
+from googlesearch import search
 from nltk.metrics.distance import edit_distance
 import spacy
 import sys
@@ -12,7 +13,7 @@ import json
 
 class RecipeBot:
     recipeData = None # All scraped data gets stored in this
-    name = "Recipe Guide" # Name of the bot
+    name = "Sous-chef" # Name of the bot
 
     # All the recipe data gets parsed into predicates, which end up in these dicts
     ingPredicates = dict()
@@ -51,7 +52,7 @@ class RecipeBot:
     # recipe and format it into a JSON.                                        #
     ############################################################################
     def __init__(self):
-        userRecipeURL = input("\nHello and welcome to the " + self.name + "! If you are ready, go ahead and type in a URL that points to a recipe you would like to work on: ")
+        userRecipeURL = input("\nHello, I am your " + self.name + "! If you are ready, go ahead and type in a URL that points to a recipe you would like to work on: ")
         request = openSession(userRecipeURL.strip())
         self.recipeData = formulateJSON(request)
 
@@ -213,11 +214,6 @@ class RecipeBot:
     def _processCommand(self, prompt, validAns, buildAns = False):
         userDecision = input(prompt)
 
-        if "." in userDecision: # The command may be "Sorry. What's next"
-            userDecision = userDecision.split(".")[-1] # Then we want just the last sentence
-        elif "," in userDecision:
-            userDecision = userDecision.split(",")[-1]
-
         if buildAns: # Then you need to check for a valid answer against the set of known commands
             lowestEditDist = float("inf")
             bestCmd = None
@@ -251,7 +247,7 @@ class RecipeBot:
                 None, True)
 
         else: # It is a straightforward check otherwise
-            while userDecision not in validAns:
+            while userDecision.lower() not in validAns:
                 userDecision = input("\nI'm afraid that I do not understand that command. Please try again, and if there were numerical prompts, enter just the number: ")
 
         return userDecision
@@ -292,7 +288,7 @@ class RecipeBot:
     def _instructionNavigation(self, currentStep, printInst = True):
         if len(self.recipeData["instructions"]) == currentStep : # If the current step goes past the last possible instruction number, then we are done
             print("\n------------------------------------------------------------------------")
-            print("\nLooks like you're all done! Good work and enjoy your food! Thanks for using " + self.name + " and see you next time!")
+            print("\nLooks like you're all done! Good work and enjoy your food! Thanks for using " + self.name + " and see you next time!\n")
             return
         else:
             for key in self.instPredicates.keys():
@@ -309,6 +305,8 @@ class RecipeBot:
                         else:
                             print("\nThe " + str(key + 1) + "th step is: " + instOfInterest["sentence"])
 
+                    # Come up with 3 different prompts and randomly pick
+                    # Would you like me to repeat that?
                     givenCommand = self._processCommand("\nLet me know what you would like to do next: ", None, True) # Valid commands are build in the function
 
                     if "repeat" in givenCommand.lower(): # Repeat the instruction
@@ -353,25 +351,47 @@ class RecipeBot:
                     elif any([navCmd in givenCommand.lower() for navCmd in self.botCommands["forwardNav"]]): # Next step command
                         self._instructionNavigation(currentStep + 1)
                     elif any([navCmd in givenCommand.lower() for navCmd in self.botCommands["backwardNav"]]): # Previous step command
-                        if currentStep - 1 <= 0: # Don't look for the 0th step
+                        if currentStep - 1 < 0: # Don't look for the 0th step
                             print("\nYou would be going to an unreachable step. Please try another command.")
                             self._instructionNavigation(currentStep, printInst = False)
                         else:
                             self._instructionNavigation(currentStep - 1)
                     elif givenCommand.lower() == "how do i do that?": # Specific to "how do I do that"
-                        searchRes = json.loads(YoutubeSearch(instOfInterest["primaryMethod"], max_results=1).to_json())["videos"][0] # Get the search result
+                        searchRes = json.loads(YoutubeSearch("How do I " + instOfInterest["sentence"] + " when it comes to cooking", max_results=1).to_json())["videos"][0] # Get the search result
                         print("\nThere's a YouTube video that may be of some help. Check this out: " + \
                         "https://www.youtube.com" + searchRes["url_suffix"])
                         self._instructionNavigation(currentStep, printInst = False)
                     elif "how do i" in givenCommand.lower(): # Any vague "how do I" command
-                        action = givenCommand.lower()[len("how do i "):] # Search everything after "how do I"
-                        searchRes = json.loads(YoutubeSearch(action, max_results=1).to_json())["videos"][0] # Get the search result
-                        print("\nThere's a YouTube video that may be of some help. Check this out: " + \
-                        "https://www.youtube.com" + searchRes["url_suffix"])
+                        appropriateQuery = self._generateQuery(givenCommand, instOfInterest["sentence"])
+                        try:
+                            searchRes = json.loads(YoutubeSearch(appropriateQuery + " when it comes to cooking", max_results=1).to_json())["videos"][0] # Get the search result
+                            print("\nThere's a YouTube video that may be of some help. Check this out: " + \
+                            "https://www.youtube.com" + searchRes["url_suffix"])
+                            userResponse = self._processCommand("\nDoes this answer your question? (Y or Yes/N or No): ", ["yes", "no", "y", "n"])
+                            if userResponse.lower() == "n" or userResponse.lower() == "no": # If the YouTube search is not enough, try Google
+                                searchRes = search(appropriateQuery + " when it comes to cooking")[0] # Get the first Google result
+                                print("\nThere's a Google result that may be of some additional help. Check this out: " + searchRes)
+                        except: # If we cannot fetch anything from YouTube, try Google
+                            searchRes = search(appropriateQuery + " when it comes to cooking")[0] # Get the first Google result
+                            print("\nThere's a Google result that may be of some help. Check this out: " + searchRes)
                         self._instructionNavigation(currentStep, printInst = False)
-                    else: # If it's not a command that we know how to process
-                        print("\nI'm sorry, something went really wrong. You should not have reached this branch. The system will exit on its own.")
+                    else: # If things got to this branch, which in theory should never happen
+                        print("\nI'm sorry, something went really wrong. You should not have reached this branch. The system will exit on its own. Try again next time.")
                         self._instructionNavigation(currentStep, printInst = False)
+
+    def _generateQuery(self, currCmd, currStep):
+        if "that" in currCmd: # It is probably an ingredient
+            for ing in self.ingPredicates:
+                if self.ingPredicates[ing]["isa"] in currStep: # Look for the first ingredient you see in the query and just return that
+                    return currCmd.replace("that", self.ingPredicates[ing]["isa"])
+        elif "those" in currCmd:
+            newCmd = currCmd.replace("those", "") # First get rid of the vague word
+            for ing in self.ingPredicates:
+                if self.ingPredicates[ing]["isa"] in currStep: # Append each detected ingredient to the query
+                    newCmd += ", " + self.ingPredicates[ing]["isa"]
+            return newCmd
+        else:
+            return currCmd
 
     ############################################################################
     # Name: _allParsing                                                        #
