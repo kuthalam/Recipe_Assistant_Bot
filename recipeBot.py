@@ -222,6 +222,9 @@ class RecipeBot:
             # If someone said "yes" or something like that, then we should repeat the current step
             if userDecision.lower() == "yes" or userDecision.lower() == "y":
                 return "repeat"
+            else: # But if they said no without saying what to do next
+                while userDecision.lower() == "no" or userDecision.lower() = "n":
+                    userDecision = self._processCommand("\nWhat should I do next then?: ", None, True)
 
             # Check for navigation commands first
             for navType in self.botCommandTypes["navTypes"]:
