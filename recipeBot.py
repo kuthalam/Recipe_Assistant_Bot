@@ -24,14 +24,14 @@ class RecipeBot:
     nlp = spacy.load("en_core_web_sm")
 
     # Now for some commands and questions we can give the bot:
-    botCommandTypes = {"navTypes": ["forwardNav", "backwardNav", "otherNav", "beginningNav", "endingNav"]}
-    botCommands = {"start": ["begin", "walk me through", "start", "want to make", "want to cook", "want to bake"],
-    "forwardNav": ["forward", "next", "after"],
+    botCommandTypes = {"navTypes": ["forwardNav", "backwardNav", "otherNav", "beginningNav", "endingNav", "doneNav"]}
+    botCommands = {"forwardNav": ["forward", "next", "after"],
     "backwardNav": ["back", "previous", "before"],
     "beginningNav": ["begin", "first"],
     "endingNav": ["final", "last"],
+    "doneNav": ["exit", "done"],
     "otherNav": ["repeat", "th step", "st step", "nd step", "rd step"],
-    "questions": ["How do I", "How to"]}
+    "questions": ["How do I", "How to", "How many steps are there?"]}
 
     # This set of all possible foods helps with parsing
     allFoods = set(["tofu", "beef", "chicken", "pork", "pepperoni", "sausage", "turkey",
@@ -223,7 +223,7 @@ class RecipeBot:
             if userDecision.lower() == "yes" or userDecision.lower() == "y":
                 return "repeat"
             else: # But if they said no without saying what to do next
-                while userDecision.lower() == "no" or userDecision.lower() = "n":
+                while userDecision.lower() == "no" or userDecision.lower() == "n":
                     userDecision = self._processCommand("\nWhat should I do next then?: ", None, True)
 
             # Check for navigation commands first
@@ -385,6 +385,9 @@ class RecipeBot:
             else:
                 self._instructionNavigation(instIdx - 1)
 
+        elif any([navCmd in userCmd.lower() for navCmd in self.botCommands["doneNav"]]): # If the user just says that they are done
+            self._instructionNavigation(len(self.recipeData["instructions"])) # Goes to the ending branch instead of a hard exit
+
         else:
             return False # Not a navigation command
 
@@ -399,25 +402,31 @@ class RecipeBot:
     # information.                                                             #
     ############################################################################
     def _handleQuestions(self, userCmd, instIdx, instruction):
-        if userCmd.lower() == "how do i do that?": # Specific to "how do I do that"
-            searchRes = json.loads(YoutubeSearch("How do I " + instruction + " when it comes to cooking", max_results=1).to_json())["videos"][0] # Get the search result
-            print("\nThere's a YouTube video that may be of some help. Check this out: https://www.youtube.com" + searchRes["url_suffix"])
-            self._instructionNavigation(instIdx, printInst = False)
+        if "how do" in userCmd.lower() or "how to" in userCmd.lower(): # All the "how to" questions
+            queryToUse = None # This is the query that gets used
 
-        elif "how do i" in userCmd.lower() or \
-        "how to" in userCmd.lower(): # Any vague "how to" command
-            appropriateQuery = self._generateQuery(userCmd, instruction)
+            if userCmd.lower() == "how do i do that?": # Specific to "how do I do that"
+                queryToUse = "How do I " + instruction + " when it comes to cooking"
+
+            elif "how do i" in userCmd.lower() or \
+            "how to" in userCmd.lower(): # Any vague "how to" command
+                queryToUse = self._generateQuery(userCmd, instruction)
+
             try: # First try searching YouTube
-                searchRes = json.loads(YoutubeSearch(appropriateQuery + " when it comes to cooking", max_results=1).to_json())["videos"][0] # Get the search result
+                searchRes = json.loads(YoutubeSearch(queryToUse + " when it comes to cooking", max_results=1).to_json())["videos"][0] # Get the search result
                 print("\nThere's a YouTube video that may be of some help. Check this out: " + \
                 "https://www.youtube.com" + searchRes["url_suffix"])
                 userResponse = self._processCommand("\nDoes this answer your question? (Y or Yes/N or No): ", ["yes", "no", "y", "n"])
                 if userResponse.lower() == "n" or userResponse.lower() == "no": # If the YouTube search is not enough, try Google
-                    searchRes = search(appropriateQuery + " when it comes to cooking")[0] # Get the first Google result
+                    searchRes = search(queryToUse + " when it comes to cooking")[0] # Get the first Google result
                     print("\nThere's a Google result that may be of some additional help. Check this out: " + searchRes)
             except: # If we cannot fetch anything from YouTube, try Google
-                searchRes = search(appropriateQuery + " when it comes to cooking")[0] # Get the first Google result
+                searchRes = search(queryToUse + " when it comes to cooking")[0] # Get the first Google result
                 print("\nThere's a Google result that may be of some help. Check this out: " + searchRes)
+            self._instructionNavigation(instIdx, printInst = False)
+
+        elif "how many steps are there" in userCmd.lower():
+            print("\nThere are " + str(len(self.instPredicates.keys())) + " steps.")
             self._instructionNavigation(instIdx, printInst = False)
 
         else: # Not a question that we can understand
@@ -434,11 +443,11 @@ class RecipeBot:
     # the ambiguous words with the parsed ingredients in the current step.     #
     ############################################################################
     def _generateQuery(self, currCmd, currStep):
-        if "that" in currCmd: # It is probably an ingredient
+        if "that" in currCmd: # We need to specify "how do I cook that?"
             for ing in self.ingPredicates:
                 if self.ingPredicates[ing]["isa"] in currStep: # Look for the first ingredient you see in the query and just return that
                     return currCmd.replace("that", self.ingPredicates[ing]["isa"])
-        elif "those" in currCmd:
+        elif "those" in currCmd: # Specify "how do I cook those?"
             newCmd = currCmd.replace("those", "") # First get rid of the vague word
             for ing in self.ingPredicates:
                 if self.ingPredicates[ing]["isa"] in currStep: # Append each detected ingredient to the query
