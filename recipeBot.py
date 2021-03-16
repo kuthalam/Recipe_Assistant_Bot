@@ -405,7 +405,7 @@ class RecipeBot:
         if "how do" in userCmd.lower() or "how to" in userCmd.lower(): # All the "how to" questions
             queryToUse = None # This is the query that gets used
 
-            if userCmd.lower() == "how do i do that?": # Specific to "how do I do that"
+            if "how do i do that" in userCmd.lower() or "how to do that" in userCmd.lower(): # Specific to the general "how to" question
                 queryToUse = "How do I " + instruction + " when it comes to cooking"
 
             elif "how do i" in userCmd.lower() or \
