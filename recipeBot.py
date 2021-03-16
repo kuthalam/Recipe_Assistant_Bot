@@ -289,7 +289,7 @@ class RecipeBot:
         if len(self.recipeData["instructions"]) == currentStep : # If the current step goes past the last possible instruction number, then we are done
             print("\n------------------------------------------------------------------------")
             print("\nLooks like you're all done! Good work and enjoy your food! Thanks for using " + self.name + " and see you next time!\n")
-            return
+            return True # Once the program sees true, everything should unwind quietly
         else:
             for key in self.instPredicates.keys():
                 instOfInterest = self.instPredicates[key]
@@ -309,75 +309,111 @@ class RecipeBot:
                     # Would you like me to repeat that?
                     givenCommand = self._processCommand("\nLet me know what you would like to do next: ", None, True) # Valid commands are build in the function
 
-                    if "repeat" in givenCommand.lower(): # Repeat the instruction
-                        self._instructionNavigation(currentStep)
-                    elif "th step" in givenCommand.lower() or \
-                    "st step" in givenCommand.lower() or \
-                    "nd step" in givenCommand.lower() or \
-                    "rd step" in givenCommand.lower(): # It's a "Take me to the nth step" command
-                        splitCmd = givenCommand.split(" ")
-                        for token in splitCmd:
-                            if "th" in token or "st" in token or "nd" in token or "rd" in token:
-                                numberNextTo = None # This is the part of the phrase where the number will be found
-                                if "th" in token:
-                                    numberNextTo = "th"
-                                elif "st" in token:
-                                    numberNextTo = "st"
-                                elif "nd" in token:
-                                    numberNextTo = "nd"
-                                elif "rd" in token:
-                                    numberNextTo = "rd"
+                    if not self._processNavCmds(givenCommand, currentStep) and not self._processQuestions(givenCommand, currentStep, instOfInterest["sentence"]): # If for whatever reason, something goes completely wrong
+                        print("\nI'm sorry, something went really wrong. You should not have reached this branch. Sous-chef will cycle back to the previous valid state.")
+                        self._instructionNavigation(currentStep, printInst = False)
 
-                                # Now we jump to the appropriate step (including error checking)
-                                stepNum = token.replace(numberNextTo, "")
-                                if stepNum.isdigit() or stepNum.replace("-", "").isdigit(): # Check for a number and jump there (extra check for negatives)
-                                    if int(stepNum) - 1 <= 0: # Don't look for the 0th step
-                                        print("\nYou would be going to an unreachable step. Please try another command.")
-                                        self._instructionNavigation(currentStep, printInst = False)
-                                    elif int(stepNum) > len(self.recipeData["instructions"]): # You try to jump too far ahead
-                                        print("""\nThis recipe does not have quite that many steps. If you would like to move to the last possible instruction, try \"Take me to the last step\".
-                                        There are """ + str(len(self.recipeData["instructions"])) + " steps in total.")
-                                        self._instructionNavigation(currentStep, printInst = False)
-                                    else:
-                                        self._instructionNavigation(int(stepNum) - 1)
-                                elif stepNum == "fir": # "...first step" command that uses the word "first"
-                                    self._instructionNavigation(0)
-                                elif stepNum == "la": # "...last step" command that uses the word "last"
-                                    self._instructionNavigation(len(self.recipeData["instructions"]) - 1)
-                    elif any([navCmd in givenCommand.lower() for navCmd in self.botCommands["beginningNav"]]): # First step command (that does not use the word "first" - see above)
-                        self._instructionNavigation(0)
-                    elif any([navCmd in givenCommand.lower() for navCmd in self.botCommands["endingNav"]]): # Last step command (that does not use the word "last" - see above)
-                        self._instructionNavigation(len(self.recipeData["instructions"]) - 1)
-                    elif any([navCmd in givenCommand.lower() for navCmd in self.botCommands["forwardNav"]]): # Next step command
-                        self._instructionNavigation(currentStep + 1)
-                    elif any([navCmd in givenCommand.lower() for navCmd in self.botCommands["backwardNav"]]): # Previous step command
-                        if currentStep - 1 < 0: # Don't look for the 0th step
+    ############################################################################
+    # Name: _processNavCmds                                                    #
+    # Params: userCmd (the command the user gave), instIdx (the step that the  #
+    # user is currently on)                                                    #
+    # Returns: None                                                            #
+    # Notes: Handles all commands that deal with navigating between            #
+    # instructions.                                                            #
+    ############################################################################
+    def _processNavCmds(self, userCmd, instIdx):
+        if "repeat" in userCmd.lower(): # Repeat the instruction
+            self._instructionNavigation(instIdx)
+
+        elif "th step" in userCmd.lower() or \
+        "st step" in userCmd.lower() or \
+        "nd step" in userCmd.lower() or \
+        "rd step" in userCmd.lower(): # It's a "Take me to the nth step" command
+            splitCmd = userCmd.split(" ")
+            for token in splitCmd:
+                if "th" in token or "st" in token or "nd" in token or "rd" in token:
+                    numberNextTo = None # This is the part of the phrase where the number will be found
+                    if "th" in token:
+                        numberNextTo = "th"
+                    elif "st" in token:
+                        numberNextTo = "st"
+                    elif "nd" in token:
+                        numberNextTo = "nd"
+                    elif "rd" in token:
+                        numberNextTo = "rd"
+
+                    # Now we jump to the appropriate step (including error checking)
+                    stepNum = token.replace(numberNextTo, "")
+                    if stepNum.isdigit() or stepNum.replace("-", "").isdigit(): # Check for a number and jump there (extra check for negatives)
+                        if int(stepNum) - 1 <= 0: # Don't look for the 0th step
                             print("\nYou would be going to an unreachable step. Please try another command.")
-                            self._instructionNavigation(currentStep, printInst = False)
+                            self._instructionNavigation(instIdx, printInst = False)
+                        elif int(stepNum) > len(self.recipeData["instructions"]): # You try to jump too far ahead
+                            print("""\nThis recipe does not have quite that many steps. If you would like to move to the last possible instruction, try \"Take me to the last step\".
+                            There are """ + str(len(self.recipeData["instructions"])) + " steps in total.")
+                            self._instructionNavigation(instIdx, printInst = False)
                         else:
-                            self._instructionNavigation(currentStep - 1)
-                    elif givenCommand.lower() == "how do i do that?": # Specific to "how do I do that"
-                        searchRes = json.loads(YoutubeSearch("How do I " + instOfInterest["sentence"] + " when it comes to cooking", max_results=1).to_json())["videos"][0] # Get the search result
-                        print("\nThere's a YouTube video that may be of some help. Check this out: https://www.youtube.com" + searchRes["url_suffix"])
-                        self._instructionNavigation(currentStep, printInst = False)
-                    elif "how do i" in givenCommand.lower() or \
-                    "how to" in givenCommand.lower(): # Any vague "how to" command
-                        appropriateQuery = self._generateQuery(givenCommand, instOfInterest["sentence"])
-                        try: # First try searching YouTube
-                            searchRes = json.loads(YoutubeSearch(appropriateQuery + " when it comes to cooking", max_results=1).to_json())["videos"][0] # Get the search result
-                            print("\nThere's a YouTube video that may be of some help. Check this out: " + \
-                            "https://www.youtube.com" + searchRes["url_suffix"])
-                            userResponse = self._processCommand("\nDoes this answer your question? (Y or Yes/N or No): ", ["yes", "no", "y", "n"])
-                            if userResponse.lower() == "n" or userResponse.lower() == "no": # If the YouTube search is not enough, try Google
-                                searchRes = search(appropriateQuery + " when it comes to cooking")[0] # Get the first Google result
-                                print("\nThere's a Google result that may be of some additional help. Check this out: " + searchRes)
-                        except: # If we cannot fetch anything from YouTube, try Google
-                            searchRes = search(appropriateQuery + " when it comes to cooking")[0] # Get the first Google result
-                            print("\nThere's a Google result that may be of some help. Check this out: " + searchRes)
-                        self._instructionNavigation(currentStep, printInst = False)
-                    else: # If things got to this branch, which in theory should never happen
-                        print("\nI'm sorry, something went really wrong. You should not have reached this branch. The system will exit on its own. Try again next time.")
-                        self._instructionNavigation(currentStep, printInst = False)
+                            self._instructionNavigation(int(stepNum) - 1)
+                    elif stepNum == "fir": # "...first step" command that uses the word "first"
+                        self._instructionNavigation(0)
+                    elif stepNum == "la": # "...last step" command that uses the word "last"
+                        self._instructionNavigation(len(self.recipeData["instructions"]) - 1)
+
+        elif any([navCmd in userCmd.lower() for navCmd in self.botCommands["beginningNav"]]): # First step command (that does not use the word "first" - see above)
+            self._instructionNavigation(0)
+
+        elif any([navCmd in userCmd.lower() for navCmd in self.botCommands["endingNav"]]): # Last step command (that does not use the word "last" - see above)
+            self._instructionNavigation(len(self.recipeData["instructions"]) - 1)
+
+        elif any([navCmd in userCmd.lower() for navCmd in self.botCommands["forwardNav"]]): # Next step command
+            self._instructionNavigation(instIdx + 1)
+
+        elif any([navCmd in userCmd.lower() for navCmd in self.botCommands["backwardNav"]]): # Previous step command
+            if instIdx - 1 < 0: # Don't look for the 0th step
+                print("\nYou would be going to an unreachable step. Please try another command.")
+                self._instructionNavigation(instIdx, printInst = False)
+            else:
+                self._instructionNavigation(instIdx - 1)
+
+        else:
+            return False # Not a navigation command
+
+        return True # Probably not needed, but here for completeness
+
+    ############################################################################
+    # Name: _processQuestions                                                  #
+    # Params: userCmd (the command the user gave), instIdx (the step that the  #
+    # user is currently on), instruction (current instruction)                 #
+    # Returns: None                                                            #
+    # Notes: Handles all commands that deal with the user asking for more      #
+    # information.                                                             #
+    ############################################################################
+    def _processQuestions(self, userCmd, instIdx, instruction):
+        if userCmd.lower() == "how do i do that?": # Specific to "how do I do that"
+            searchRes = json.loads(YoutubeSearch("How do I " + instruction + " when it comes to cooking", max_results=1).to_json())["videos"][0] # Get the search result
+            print("\nThere's a YouTube video that may be of some help. Check this out: https://www.youtube.com" + searchRes["url_suffix"])
+            self._instructionNavigation(instIdx, printInst = False)
+
+        elif "how do i" in userCmd.lower() or \
+        "how to" in userCmd.lower(): # Any vague "how to" command
+            appropriateQuery = self._generateQuery(userCmd, instruction)
+            try: # First try searching YouTube
+                searchRes = json.loads(YoutubeSearch(appropriateQuery + " when it comes to cooking", max_results=1).to_json())["videos"][0] # Get the search result
+                print("\nThere's a YouTube video that may be of some help. Check this out: " + \
+                "https://www.youtube.com" + searchRes["url_suffix"])
+                userResponse = self._processCommand("\nDoes this answer your question? (Y or Yes/N or No): ", ["yes", "no", "y", "n"])
+                if userResponse.lower() == "n" or userResponse.lower() == "no": # If the YouTube search is not enough, try Google
+                    searchRes = search(appropriateQuery + " when it comes to cooking")[0] # Get the first Google result
+                    print("\nThere's a Google result that may be of some additional help. Check this out: " + searchRes)
+            except: # If we cannot fetch anything from YouTube, try Google
+                searchRes = search(appropriateQuery + " when it comes to cooking")[0] # Get the first Google result
+                print("\nThere's a Google result that may be of some help. Check this out: " + searchRes)
+            self._instructionNavigation(instIdx, printInst = False)
+
+        else: # Not a question that we can understand
+            return False
+
+        return True # Probably not needed, but here for completeness
 
     ############################################################################
     # Name: _generateQuery                                                     #
