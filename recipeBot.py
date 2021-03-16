@@ -10,6 +10,7 @@ import re
 import nltk
 import requests
 import json
+import random
 
 class RecipeBot:
     recipeData = None # All scraped data gets stored in this
@@ -218,6 +219,10 @@ class RecipeBot:
             lowestEditDist = float("inf")
             bestCmd = None
 
+            # If someone said "yes" or something like that, then we should repeat the current step
+            if userDecision.lower() == "yes" or userDecision.lower() == "y":
+                return "repeat"
+
             # Check for navigation commands first
             for navType in self.botCommandTypes["navTypes"]:
                 for navCmd in self.botCommands[navType]:
@@ -306,22 +311,24 @@ class RecipeBot:
                             print("\nThe " + str(key + 1) + "th step is: " + instOfInterest["sentence"])
 
                     # Come up with 3 different prompts and randomly pick
-                    # Would you like me to repeat that?
-                    givenCommand = self._processCommand("\nLet me know what you would like to do next: ", None, True) # Valid commands are build in the function
+                    nextPrompts = ["\nLet me know what you would like to do next. I can repeat the instruction too: ",
+                    "\nReady for another command. Let me know if I should repeat what I just said: ",
+                    "\nWould you like me to repeat that? Otherwise, I am ready for whatever you would like to do next: "]
+                    givenCommand = self._processCommand(nextPrompts[random.randint(0, len(nextPrompts) - 1)], None, True) # Valid commands are built in the function
 
-                    if not self._processNavCmds(givenCommand, currentStep) and not self._processQuestions(givenCommand, currentStep, instOfInterest["sentence"]): # If for whatever reason, something goes completely wrong
+                    if not self._handleNavCmds(givenCommand, currentStep) and not self._handleQuestions(givenCommand, currentStep, instOfInterest["sentence"]): # If for whatever reason, something goes completely wrong
                         print("\nI'm sorry, something went really wrong. You should not have reached this branch. Sous-chef will cycle back to the previous valid state.")
                         self._instructionNavigation(currentStep, printInst = False)
 
     ############################################################################
-    # Name: _processNavCmds                                                    #
+    # Name: _handleNavCmds                                                     #
     # Params: userCmd (the command the user gave), instIdx (the step that the  #
     # user is currently on)                                                    #
     # Returns: None                                                            #
     # Notes: Handles all commands that deal with navigating between            #
     # instructions.                                                            #
     ############################################################################
-    def _processNavCmds(self, userCmd, instIdx):
+    def _handleNavCmds(self, userCmd, instIdx):
         if "repeat" in userCmd.lower(): # Repeat the instruction
             self._instructionNavigation(instIdx)
 
@@ -381,14 +388,14 @@ class RecipeBot:
         return True # Probably not needed, but here for completeness
 
     ############################################################################
-    # Name: _processQuestions                                                  #
+    # Name: _handleQuestions                                                   #
     # Params: userCmd (the command the user gave), instIdx (the step that the  #
     # user is currently on), instruction (current instruction)                 #
     # Returns: None                                                            #
     # Notes: Handles all commands that deal with the user asking for more      #
     # information.                                                             #
     ############################################################################
-    def _processQuestions(self, userCmd, instIdx, instruction):
+    def _handleQuestions(self, userCmd, instIdx, instruction):
         if userCmd.lower() == "how do i do that?": # Specific to "how do I do that"
             searchRes = json.loads(YoutubeSearch("How do I " + instruction + " when it comes to cooking", max_results=1).to_json())["videos"][0] # Get the search result
             print("\nThere's a YouTube video that may be of some help. Check this out: https://www.youtube.com" + searchRes["url_suffix"])
