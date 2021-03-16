@@ -30,7 +30,7 @@ class RecipeBot:
     "beginningNav": ["begin", "first"],
     "endingNav": ["final", "last"],
     "otherNav": ["repeat", "th step", "st step", "nd step", "rd step"],
-    "questions": ["How do I"]}
+    "questions": ["How do I", "How to"]}
 
     # This set of all possible foods helps with parsing
     allFoods = set(["tofu", "beef", "chicken", "pork", "pepperoni", "sausage", "turkey",
@@ -358,12 +358,12 @@ class RecipeBot:
                             self._instructionNavigation(currentStep - 1)
                     elif givenCommand.lower() == "how do i do that?": # Specific to "how do I do that"
                         searchRes = json.loads(YoutubeSearch("How do I " + instOfInterest["sentence"] + " when it comes to cooking", max_results=1).to_json())["videos"][0] # Get the search result
-                        print("\nThere's a YouTube video that may be of some help. Check this out: " + \
-                        "https://www.youtube.com" + searchRes["url_suffix"])
+                        print("\nThere's a YouTube video that may be of some help. Check this out: https://www.youtube.com" + searchRes["url_suffix"])
                         self._instructionNavigation(currentStep, printInst = False)
-                    elif "how do i" in givenCommand.lower(): # Any vague "how do I" command
+                    elif "how do i" in givenCommand.lower() or \
+                    "how to" in givenCommand.lower(): # Any vague "how to" command
                         appropriateQuery = self._generateQuery(givenCommand, instOfInterest["sentence"])
-                        try:
+                        try: # First try searching YouTube
                             searchRes = json.loads(YoutubeSearch(appropriateQuery + " when it comes to cooking", max_results=1).to_json())["videos"][0] # Get the search result
                             print("\nThere's a YouTube video that may be of some help. Check this out: " + \
                             "https://www.youtube.com" + searchRes["url_suffix"])
@@ -379,6 +379,14 @@ class RecipeBot:
                         print("\nI'm sorry, something went really wrong. You should not have reached this branch. The system will exit on its own. Try again next time.")
                         self._instructionNavigation(currentStep, printInst = False)
 
+    ############################################################################
+    # Name: _generateQuery                                                     #
+    # Params: currCmd (the command that triggered the query),                  #
+    # currStep (the instruction the user is currently working on)              #
+    # Returns: None                                                            #
+    # Notes: Based on any ambigous phrasing in the user's question, we replace #
+    # the ambiguous words with the parsed ingredients in the current step.     #
+    ############################################################################
     def _generateQuery(self, currCmd, currStep):
         if "that" in currCmd: # It is probably an ingredient
             for ing in self.ingPredicates:
