@@ -3,9 +3,9 @@ Project 3 repository for CS 337: NLP
 
 # Running the code
 Please follow the two installation steps below:
-* First run `conda env create --name <myEnvName> -f environment.yml`
+* First run `pip install -r requirements.txt`
 * Then an additional command is needed to get the dependency parser working: `python3 -m spacy download en_core_web_sm`
-    * For some reason, `conda env export` was not enough to get the `environment.yml` file to take care of this.
+    * For some reason, `pip freeze` was not enough to get the `requirements.txt` file to take care of this.
 
 To run the code, you just need to enter `python recipeBot.py`
 * It will ask you to paste in a recipe from allRecipes.com

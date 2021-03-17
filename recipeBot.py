@@ -7,7 +7,6 @@ from nltk.metrics.distance import edit_distance
 import spacy
 import sys
 import re
-import nltk
 import requests
 import json
 import random
@@ -421,8 +420,11 @@ class RecipeBot:
                     searchRes = search(queryToUse + " when it comes to cooking")[0] # Get the first Google result
                     print("\nThere's a Google result that may be of some additional help. Check this out: " + searchRes)
             except: # If we cannot fetch anything from YouTube, try Google
-                searchRes = search(queryToUse + " when it comes to cooking")[0] # Get the first Google result
-                print("\nThere's a Google result that may be of some help. Check this out: " + searchRes)
+                if not queryToUse is None: # Extra layer of checking
+                    searchRes = search(queryToUse + " when it comes to cooking")[0] # Get the first Google result
+                    print("\nThere's a Google result that may be of some help. Check this out: " + searchRes)
+                else:
+                    return False
             self._instructionNavigation(instIdx, printInst = False)
 
         elif "how many steps are there" in userCmd.lower():
