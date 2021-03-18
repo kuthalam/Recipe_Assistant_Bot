@@ -280,8 +280,8 @@ class RecipeBot:
         elif givenCommand == 2:
             self._ingredientList()
         else: # Just a placeholder that will never be reached, hopefully, but just in case...
-            print("\nI'm sorry, something went really wrong. You should not have reached this branch. The system will exit on its own.")
-            sys.exit(0)
+            print("\nI'm sorry, something went really wrong. You should not have reached this branch. Sous-chef will cycle back to the previous valid state.")
+            self._instructionNavigation(currentStep, printInst = False)
 
     ############################################################################
     # Name: _instructionNavigation                                             #
@@ -338,6 +338,7 @@ class RecipeBot:
         "st step" in userCmd.lower() or \
         "nd step" in userCmd.lower() or \
         "rd step" in userCmd.lower(): # It's a "Take me to the nth step" command
+            cmdProcessed = False # If this turns to True, then we know we can "unwind" from the recursion and avoid the "error handling" below
             splitCmd = userCmd.split(" ")
             for token in splitCmd:
                 if "th" in token or "st" in token or "nd" in token or "rd" in token:
@@ -353,20 +354,34 @@ class RecipeBot:
 
                     # Now we jump to the appropriate step (including error checking)
                     stepNum = token.replace(numberNextTo, "")
+                    stepNumWords = {"fir": 0, "seco": 1, "thi": 2, "four": 3, "fif": 4, "six": 5, "seven": 6, "eigh": 7, "nin": 8, "la": len(self.recipeData["instructions"]) - 1}
                     if stepNum.isdigit() or stepNum.replace("-", "").isdigit(): # Check for a number and jump there (extra check for negatives)
                         if int(stepNum) - 1 <= 0: # Don't look for the 0th step
                             print("\nYou would be going to an unreachable step. Please try another command.")
+                            cmdProcessed = True
                             self._instructionNavigation(instIdx, printInst = False)
                         elif int(stepNum) > len(self.recipeData["instructions"]): # You try to jump too far ahead
                             print("""\nThis recipe does not have quite that many steps. If you would like to move to the last possible instruction, try \"Take me to the last step\".
                             There are """ + str(len(self.recipeData["instructions"])) + " steps in total.")
+                            cmdProcessed = True
                             self._instructionNavigation(instIdx, printInst = False)
                         else:
+                            cmdProcessed = True
                             self._instructionNavigation(int(stepNum) - 1)
-                    elif stepNum == "fir": # "...first step" command that uses the word "first"
-                        self._instructionNavigation(0)
-                    elif stepNum == "la": # "...last step" command that uses the word "last"
-                        self._instructionNavigation(len(self.recipeData["instructions"]) - 1)
+                    elif stepNum in stepNumWords.keys(): # If a word was used to denote the number (e.g. "sixth" instead of 6)
+                        if len(self.recipeData["instructions"]) >= stepNumWords[stepNum]: # If it is possible to jump there
+                            cmdProcessed = True
+                            self._instructionNavigation(stepNumWords[stepNum]) # Jump there
+                        else:
+                            print("""\nThis recipe does not have quite that many steps. If you would like to move to the last possible instruction, try \"Take me to the last step\".
+                            There are """ + str(len(self.recipeData["instructions"])) + " steps in total.")
+                            cmdProcessed = True
+                            self._instructionNavigation(instIdx, printInst = False)
+
+            # If you are here, then there was no command that was understood, so as usual, cycle back to a valid state. This is the "error handling" mentioned earlier
+            if not cmdProcessed:
+                print("\nI'm afraid that I do not understand that command. Please try again and note that using numbers instead of words might help.")
+                self._instructionNavigation(instIdx, printInst = False)
 
         elif any([navCmd in userCmd.lower() for navCmd in self.botCommands["beginningNav"]]): # First step command (that does not use the word "first" - see above)
             self._instructionNavigation(0)
