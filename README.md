@@ -2,10 +2,13 @@
 Project 3 repository for CS 337: NLP
 
 # Running the code
-Please follow the two installation steps below:
-* First run `pip install -r requirements.txt`
-* Then an additional command is needed to get the dependency parser working: `python3 -m spacy download en_core_web_sm`
-    * For some reason, `pip freeze` was not enough to get the `requirements.txt` file to take care of this.
+Once you run `pip install -r requirements.txt`, everything should be good to go.
+* If it is not for some reason, please follow these steps:
+  * Start with the `requirements.txt` file from project 2 that the team was emailed
+  * Then run `pip install youtube-search`
+  * Then `pip install googlesearch-python`
+  * Finally, run `python3 -m spacy download en_core_web_sm`
+  * Everything should work as expected from here
 
 To run the code, you just need to enter `python recipeBot.py`
 * It will ask you to paste in a recipe from allRecipes.com
@@ -19,7 +22,7 @@ To run the code, you just need to enter `python recipeBot.py`
   * Going to the previous step requires typing any statement with "back", "previous", or "before".
   * The bot can also jump to any step, so long as you give a statement with the appropriate number in it.
     * Example 1: Take me to the 6th step
-    * Example 2: Take me to the 3rd step
+    * Example 2: Take me to the third step
     * On that note, you can also say "take me to the first step" and "take me to the last step".
       * However, the request needs to have one of the following words to work as expected: "begin", "first", "final", "last"
   * At any point, you can say "Ok, I'm done cooking" and the bot will behave as though you finished the recipe.
