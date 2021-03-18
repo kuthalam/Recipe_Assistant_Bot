@@ -23,6 +23,8 @@ To run the code, you just need to enter `python recipeBot.py`
   * The bot can also jump to any step, so long as you give a statement with the appropriate number in it.
     * Example 1: Take me to the 6th step
     * Example 2: Take me to the third step
+    * You can use just words to denote numbers (like "third" in example 2), but this only works for single digit values
+      * For example, "eighth" and "sixth" are valid, but "sixteenth" would not work.
     * On that note, you can also say "take me to the first step" and "take me to the last step".
       * However, the request needs to have one of the following words to work as expected: "begin", "first", "final", "last"
   * At any point, you can say "Ok, I'm done cooking" and the bot will behave as though you finished the recipe.
