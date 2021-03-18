@@ -281,7 +281,7 @@ class RecipeBot:
             self._ingredientList()
         else: # Just a placeholder that will never be reached, hopefully, but just in case...
             print("\nI'm sorry, something went really wrong. You should not have reached this branch. Sous-chef will cycle back to the previous valid state.")
-            self._instructionNavigation(currentStep, printInst = False)
+            self._ingredientList()
 
     ############################################################################
     # Name: _instructionNavigation                                             #
